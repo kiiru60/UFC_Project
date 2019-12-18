@@ -1,0 +1,298 @@
+---
+title: "Final Project"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+install.packages('tidyverse')
+dat <- read.csv('UFCData.csv')
+library(ggplot2)
+```
+
+```{r}
+library(MASS)
+#install.packages('GGally')
+library(GGally)
+```
+```{r}
+install.packages('data.table')
+library(data.table)
+```
+```{r}
+install.packages('corrplot')
+library(corrplot)
+```
+
+## Data Exploration
+
+In this section, we will mutate and plot the data in order to understand relationships within the data. 
+```{r}
+#head(dat)
+nrow(dat)
+```
+## Column mutation
+converting Blue and red on winner into  to Win /Loss /Draw /No Contest for each fighter
+```{r}
+#convert Blue and red on winner into  to Win /Loss /Draw /No Contest for each fighter
+ result1<-rep("a", 3592)
+result2<-rep("a", 3592)
+for (i in c(1:3592)) {
+  if (dat$Winner[i]=="Red") {
+    result1[i]<-"L"
+    result2[i]<-"W"
+  } else if (dat$Winner[i]=="Blue") {
+   result1[i]<-"W"
+    result2[i]<-"L"
+  } else if (dat$Winner[i]=="draw") {
+    result1[i]<-"D"
+    result2[i]<-"D"
+  } else {
+    result1[i]<-"NC"
+    result2[i]<-"NC"
+   }
+ }
+```
+
+```{r}
+dat$Blue_result <- result1
+dat$Red_result <- result2
+```
+
+```{r}
+table(dat$Winner)
+table(dat$no_of_rounds)
+table(dat$R_age)
+table(dat$B_age)
+
+```
+
+First off, let's get a broad look at how several of the columns within this dataset look in relationship to each other.
+```{r}
+ggpairs(data=dat, columns=c("R_age", "B_age", "R_Weight_lbs", "B_Weight_lbs", "Winner"))
+```
+## Testing for corelation
+To see if some of the variables are correlated to each other we run the corelation plots, which produced the results below:
+```{r}
+
+totalcor<-cor(dat[,c(4:5,7:23,27)])
+par(xpd=TRUE)
+corrplot(totalcor, type = "lower", order = "hclust", 
+         tl.col = "black", tl.srt = 90, mar = c(1,1,.5,.5))
+```
+##Testing whether the variables are normally distributed
+The variables in our data are not normally distributed.
+```{r}
+ggplot(data=dat, aes(no_of_rounds)) + geom_bar(aes(fill=Winner))
+```
+
+Now, in order to get a feel for how the wins are distributed, we can use a facet grid to see wins for each color by the number of rounds each fight took.
+```{r pressure, echo=FALSE}
+ggplot(data=dat, aes(no_of_rounds)) + geom_bar(aes(fill=Blue_result)) + facet_grid(~Winner)
+```
+So this plot shows the number of times blue and red each one, with the number of rounds that fight went on the x-axis. The first graph is the number of times Blue won, with most occurring in the third round, and the second shows the number of times red won, again, with the majority ocurring in the third round. 
+
+
+```{r}
+dat$weight_dif <- dat$R_Weight_lbs - dat$B_Weight_lbs
+dat$height_dif <- dat$R_Height_cms - dat$B_Height_cms
+qqnorm(dat$R_Weight_lbs)
+qqnorm(dat$B_Weight_lbs)
+```
+So we see that most of our fighters' weight is distributed within 2 standard deviations of the mean, which appears to be around 190 pounds. 
+
+To examine this further, we plotted histograms of both red and blue fighters' weights. 
+```{r}
+ggplot(data=dat, aes(B_Weight_lbs)) + geom_histogram(binwidth = 20)
+ggplot(data=dat, aes(R_Weight_lbs)) + geom_histogram(binwidth = 20)
+```
+
+
+Now, let's see how the weight difference in each fight is distrubuted.
+```{r}
+ggplot(data=dat, aes(x=weight_dif)) + geom_density(adjust=4)
+```
+And as to be expected, since every fight has its own weight class, the difference in weights will be pretty minimal, centered around zero. 
+
+Moving on, lets take a look at age for both Red and Blue fighters
+```{r}
+ggplot(data=dat, aes(R_age)) + geom_histogram(binwidth=1)
+ggplot(data=dat, aes(B_age)) + geom_histogram(binwidth=1)
+```
+In both plots, around 28-30 is the most ocurring age with it quickly tapering off after 34 years old, which makes intuitive sense. Fighting is very tough on the body, and one can only take so much physical abuse before having to retire. 
+
+## Linear Regression Analyis
+Null Hypothesis: No difference in the number of head strikes attempted by red and blue between winners.
+
+## Building a  Linear Regression Model
+```{r}
+fit<-lm(R_avg_HEAD_att ~ B_avg_HEAD_att, data = dat)
+summary(fit)
+```
+
+## Plotting the regression
+```{r}
+plot(lm(R_avg_HEAD_att ~ B_avg_HEAD_att, data = dat))
+```
+Looking at the plots above we can see that the data is not normally distributed, there is not a mean of zero, and there is uncommon variance.
+
+## Building a Linear Regression Model
+Null Hypothesis: No difference in the number of head strikes landed by red and blue between winners.
+```{r}
+fit<-lm(R_avg_HEAD_landed ~ B_avg_HEAD_landed, data = dat)
+summary(fit)
+```
+
+## Plotting the regression model
+```{r}
+plot(lm(R_avg_HEAD_landed ~ B_avg_HEAD_landed, data = dat))
+```
+Looking at the plots above we can see that the data is not normally distributed, and there is uncommon variance.
+
+## Logistic Regresion
+
+So now that we have been able to visualize various parts of the data, we can start creating models that might describe the relationships within our data set. 
+
+First we need to create a category for our winner: 1 if red, 0 if blue
+```{r}
+dat$numeric_winner <- as.numeric(dat$Winner == "Red")
+```
+
+And now we will create a logistic regression throwing a bunch of explanatory variables:
+```{r}
+logit1 <- glm(numeric_winner~R_Height_cms + B_Height_cms + R_age + B_age + R_Weight_lbs + B_Weight_lbs + weight_dif + height_dif + B_avg_BODY_att + R_avg_BODY_att + B_avg_BODY_landed + R_avg_BODY_landed + B_avg_HEAD_att + R_avg_HEAD_att + B_avg_HEAD_landed + R_avg_HEAD_landed,data=dat, family="binomial")
+summary(logit1)
+```
+```{r}
+ggplot(dat, aes(x=R_age, y=numeric_winner)) + geom_jitter(height=0.1,width=0.5,size = .5) + 
+     geom_smooth(method = "glm", method.args = list(family = "binomial")) + xlab("Red Age") + 
+     ylab(" ") + theme(axis.text=element_text(size=12),axis.title=element_text(size=16,face="bold"))
+```
+
+```{r}
+ggplot(dat, aes(x=B_age, y=numeric_winner)) + geom_jitter(height=0.1,width=0.5,size = .5) + 
+     geom_smooth(method = "glm", method.args = list(family = "binomial")) + xlab("Blue Age") + 
+     ylab(" ") + theme(axis.text=element_text(size=12),axis.title=element_text(size=16,face="bold"))
+```
+```{r}
+ggplot(dat,aes(x=R_age,y=R_Height_cms))+ geom_point(aes(color=factor(Red_result)))
+```
+So for clarity: the red dots are where the Red fighter lost, and the blue dots are where the Red fighter won
+
+Now perhaps the age of either one is not very interesting to consider, so let's instead take a look at the age difference, specifically the age of red less the age of blue:
+```{r}
+dat$age_diff <- dat$R_age-dat$B_age
+ggplot(dat, aes(x=age_diff, y=numeric_winner)) + geom_jitter(height=0.1,width=0.5,size = .5) + 
+     geom_smooth(method = "glm", method.args = list(family = "binomial")) + xlab("Age Difference") + 
+     ylab(" ") + theme(axis.text=element_text(size=12),axis.title=element_text(size=16,face="bold"))
+
+```
+This perspective takes into account the age of the other figher as well, and as we see, typically the younger the fighter compared to the other, the better chance they hold in beating their opponent, holding all else equal. One might expect experience to play a larger role, but it seems that advantages of youth overrides experience in this data. 
+
+Let's try to trim our regression a little bit and put our predictive variables in terms of comparative difference:
+```{r}
+dat$avg_diff_body_landed <-dat$R_avg_BODY_landed-dat$B_avg_BODY_landed
+dat$avg_diff_head_landed <-dat$R_avg_HEAD_landed-dat$B_avg_HEAD_landed
+logit2 <- glm(numeric_winner~height_dif+weight_dif+age_diff + avg_diff_body_landed + avg_diff_head_landed,data=dat, family="binomial")
+summary(logit2)
+```
+So as we see from the significance codes, the things that we are the most confident affect the outcome of a fight is the difference in age and the difference in headshots landed. 
+
+
+
+#### Predicting Winner Using Decision Tree
+we decided to test our Logistic regression  using a Decision Tree to predict the winner
+
+## Step 1:Split data in train and test data
+We decided to split the data using 0.7 ratio and divide it into two data sets which are training and testing set.
+```{r}
+#install.packages("caTools")
+library(caTools)
+#install.packages("rpart")
+library(rpart)
+set.seed(2447)
+#splitting the data 
+split <- sample.split(dat, SplitRatio = 0.7)
+split
+#dividing the data into trainig and testing subsets
+train <- subset(dat, split=="TRUE")
+test <- subset(dat, split=="FALSE")
+#str(train)
+#str(test)
+```
+# Step 2:Train model with logistics regression using glm function
+In this we built our model inform of logistic regression and used the train subset as our data.
+```{r}
+dmodel <- rpart(numeric_winner~., data=train, method="class")
+dmodel
+summary(dmodel)
+```
+
+#To visualize how our model is predicting we decided to plot our model
+From our results we can see the we have split errors hence our decison tree need pruning 
+```{r}
+printcp(dmodel)
+plotcp(dmodel)
+```
+
+```{r}
+plot(dmodel,uniform=TRUE,branch=0.6,margin=0.1)
+```
+# Step 3:Predict test data based on trained model 
+we used our trained model to predict the winner on the test data.
+```{r}
+test$numeric_winner_predicted <-predict(dmodel, newdata=test, type="class")
+table(test$numeric_winner,test$numeric_winner_predicted)
+```
+```{r}
+install.packages("caret")
+library(caret)
+```
+
+```{r}
+install.packages("e1071")
+library(e1071)
+```
+# Step 4: Evauate Model Accuracy using Confusion matrix
+we used confusion matrix to evalute the accuracy of our model
+```{r}
+confusionMatrix(table(test$numeric_winner,test$numeric_winner_predicted))
+```
+## Tree Pruning
+#Find the value of CP for which cross validation error is minimum
+```{r}
+min(dmodel$cptable[,"xerror"])
+which.min(dmodel$cptable[,"xerror"])
+cpmin <- dmodel$cptable[2, "CP"]
+```
+```{r}
+##install.packages('rpart.plot')
+library(rpart.plot)
+```
+#Prune the tree by setting the CP parameter as =  cpmin
+```{r}
+
+decision_tree_pruned = prune(dmodel, cp = cpmin)
+rpart.plot(decision_tree_pruned)
+printcp(decision_tree_pruned)
+plotcp(decision_tree_pruned)
+
+```
+# Predict test data based on trained model
+```{r}
+test$numeric_winner_predicted <-predict(decision_tree_pruned, newdata=test, type="class")
+table(test$numeric_winner,test$numeric_winner_predicted)
+```
+# Evaluate Model Accuracy using Confusion matrix
+```{r}
+confusionMatrix(table(test$numeric_winner,test$numeric_winner_predicted))
+```
